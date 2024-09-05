@@ -1,6 +1,8 @@
 import { Text, View } from "react-native";
 import VoiceUI from "./voice_ui";
 import React, { useState, useEffect } from "react";
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
 
 
 export default function Index() {
@@ -18,7 +20,7 @@ export default function Index() {
     console.log(results);
   }, [results]);
   return (
-    <View
+    <GestureHandlerRootView
       style={{
         flex: 1,
         justifyContent: "center",
@@ -26,6 +28,6 @@ export default function Index() {
       }}
     >
       <VoiceUI onEndListen={handleEndListening} onStartListen={handleStartListening} results={results}></VoiceUI>
-    </View>
+    </GestureHandlerRootView>
   );
 }
