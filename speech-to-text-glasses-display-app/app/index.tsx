@@ -8,13 +8,19 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 export default function Index() {
   const [results, setResults] = useState('');
 
-  const handleStartListening = () => {
+  const handleStartListening = async () => {
     setResults('started listening');
+    await timeout(1000);
+    setResults(prevResults => prevResults + '...');
   };
 
   const handleEndListening = () => {
     setResults('stopped listening');
   };
+
+  function timeout(delay: number) {
+    return new Promise( res => setTimeout(res, delay) );
+}
 
   useEffect(() => {
     console.log(results);
@@ -30,4 +36,5 @@ export default function Index() {
       <VoiceUI onEndListen={handleEndListening} onStartListen={handleStartListening} results={results}></VoiceUI>
     </GestureHandlerRootView>
   );
+  
 }
