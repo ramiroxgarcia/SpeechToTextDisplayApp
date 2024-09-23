@@ -1,13 +1,14 @@
 import { Button, Text, View } from "react-native";
 import React, { useState, useEffect } from "react";
 import { TextInput } from "react-native-gesture-handler";
+import Voice from "@react-native-voice/voice"
 
 export default function VoiceUI({ onStartListen = () => {}, 
                                 onEndListen = () => {}, 
                                 results = '' as string}) {
     const [isListening, setIsListening] = useState(false);
     const [voiceResults, setVoiceResults] = useState(results);
-
+    
     const toggleListening = () => {
         setIsListening(!isListening);
 
