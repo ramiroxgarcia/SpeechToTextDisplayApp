@@ -6,6 +6,7 @@ import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 const VoiceRecognition = () => {
   const [recognizedText, setRecognizedText] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [isListening, setIsListening] = useState<boolean>(false); // Track listening state
 
   useEffect(() => {
     // Assign correct event handlers
@@ -19,8 +20,11 @@ const VoiceRecognition = () => {
   }, []);
 
   const onSpeechResults = (event: SpeechResultsEvent) => {
-    if (event.value && event.value.length > 0) {
-      setRecognizedText(event.value[0]);
+    // Check if event.value is defined and has values
+    if (event.value && Array.isArray(event.value) && event.value.length > 0) {
+      // Set recognized text to the latest recognized phrase
+      setRecognizedText(event.value[0]); // Replace with the most recent phrase
+      startListening();
     }
   };
 
@@ -46,6 +50,7 @@ const VoiceRecognition = () => {
   const startListening = async () => {
     try {
       await Voice.start('en-US');
+      setIsListening(true); // Set listening state to true
       setError('');
     } catch (e) {
       console.error(e);
@@ -55,6 +60,7 @@ const VoiceRecognition = () => {
   const stopListening = async () => {
     try {
       await Voice.stop();
+      setIsListening(false); // Set listening state to false
     } catch (e) {
       console.error(e);
     }
@@ -62,9 +68,14 @@ const VoiceRecognition = () => {
 
   return (
     <View>
-      <Button title="Start Listening" onPress={requestMicrophonePermission} />
-      <Button title="Stop Listening" onPress={stopListening} />
-      {recognizedText ? <Text>Recognized Text: {recognizedText}</Text> : null}
+      <Button 
+        title={isListening ? "Listening..." : "Start Listening"} 
+        onPress={isListening ? stopListening : requestMicrophonePermission} 
+      />
+      {isListening && (
+        <Button title="Stop Listening" onPress={stopListening} />
+      )}
+      <Text style={{ fontSize: 24, padding: 20 }}>Recognized Text: {recognizedText}</Text>
       {error ? <Text>Error: {error}</Text> : null}
     </View>
   );
