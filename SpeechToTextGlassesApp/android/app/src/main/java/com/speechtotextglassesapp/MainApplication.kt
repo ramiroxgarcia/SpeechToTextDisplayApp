@@ -10,6 +10,7 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.facebook.soloader.SoLoader
+import com.wenkesj.voice.VoicePackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -40,4 +41,6 @@ class MainApplication : Application(), ReactApplication {
       load()
     }
   }
+
+  
 }

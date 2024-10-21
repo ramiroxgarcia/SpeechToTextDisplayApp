@@ -1,5 +1,6 @@
 import { Text, View } from "react-native";
 import VoiceUI from "./voice_ui";
+import VoiceRecognition from "./Voice";
 import React, { useState, useEffect } from "react";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -27,7 +28,7 @@ export default function Home() {
         alignItems: "center",
       }}
     >
-      <VoiceUI onEndListen={handleEndListening} onStartListen={handleStartListening} results={results}></VoiceUI>
+      <VoiceRecognition/>
     </GestureHandlerRootView>
   );
 }
