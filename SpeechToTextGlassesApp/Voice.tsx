@@ -106,6 +106,7 @@ const VoiceRecognition = () => {
 
   const sendResultString = async (sendString: string) => {
     if (!device || !espConnected) {
+      console.log('not connected')
       return;
     }
 
@@ -127,6 +128,9 @@ const VoiceRecognition = () => {
     if (event.value && Array.isArray(event.value) && event.value.length > 0) {
       // Set recognized text to the latest recognized phrase
       setRecognizedText(event.value[0]); // Replace with the most recent phrase
+
+      sendResultString(event.value[0]); // send recognized text esp
+
       startListening();
     }
   };
@@ -171,7 +175,7 @@ const VoiceRecognition = () => {
 
   return (
     <View>
-      {espConnected ? (
+      {!espConnected ? (
         <>
           <Button 
             title={isListening ? "Listening..." : "Start Listening"} 
