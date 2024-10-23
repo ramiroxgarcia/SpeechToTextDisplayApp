@@ -24,6 +24,7 @@ import {
 import {
   Colors,
 } from 'react-native/Libraries/NewAppScreen';
+import Voice from './Voice';
 
 type SectionProps = PropsWithChildren<{
   title: string;
