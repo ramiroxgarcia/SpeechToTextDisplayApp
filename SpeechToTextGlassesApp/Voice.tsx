@@ -175,7 +175,7 @@ const VoiceRecognition = () => {
 
   return (
     <View>
-      {!espConnected ? (
+      {espConnected ? (
         <>
           <Button 
             title={isListening ? "Listening..." : "Start Listening"} 
