@@ -96,7 +96,9 @@ const VoiceRecognition = () => {
   
   const connectToESP = async (scannedDevice: Device) => {
     try {
-      const connectedDevice = await scannedDevice.connect();
+      const connectedDevice = await scannedDevice.connect().then((device) => {
+        return device.discoverAllServicesAndCharacteristics()
+      });
       setDevice(connectedDevice);
       setEspConnected(true);
     } catch (e) {
@@ -111,10 +113,31 @@ const VoiceRecognition = () => {
     }
 
     try {
-      await device.writeCharacteristicWithResponseForService(
-        espServiceUUID,
-        espCharacteristicUUID,
-        sendString
+
+      let test = ""
+
+      // wait until ESP is ready
+      while (test != "1") {
+        try {
+          const charc = await device.readCharacteristicForService("22222", "ABCD")
+          test = charc?.value ? Buffer.from(charc.value, 'base64').toString('utf-8') : ""
+        }
+        catch (e) {
+          console.log('Error reading characteristic:', e);
+          break;
+        }
+      }
+
+      await device.writeCharacteristicWithoutResponseForService(
+        "11111",
+        "ABCD",
+        Buffer.from(sendString, 'utf-8').toString('base64')
+      );
+
+      await device.writeCharacteristicWithoutResponseForService(
+        "22222",
+        "ABCD",
+        Buffer.from("0", 'utf-8').toString('base64')
       );
     }
     catch (e) {
@@ -123,13 +146,13 @@ const VoiceRecognition = () => {
   }
 
 
-  const onSpeechResults = (event: SpeechResultsEvent) => {
+  const onSpeechResults = async (event: SpeechResultsEvent) => {
     // Check if event.value is defined and has values
     if (event.value && Array.isArray(event.value) && event.value.length > 0) {
       // Set recognized text to the latest recognized phrase
       setRecognizedText(event.value[0]); // Replace with the most recent phrase
 
-      sendResultString(event.value[0]); // send recognized text esp
+      await sendResultString(event.value[0]); // send recognized text esp
 
       startListening();
     }
