@@ -4,12 +4,14 @@ import Voice, { SpeechResultsEvent, SpeechErrorEvent } from '@react-native-voice
 import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions'; // Import permissions
 import { BleManager, Device } from "react-native-ble-plx";
 
+const bleManager = new BleManager()
+global.Buffer = require('buffer').Buffer;
+
 const VoiceRecognition = () => {
   const [recognizedText, setRecognizedText] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [isListening, setIsListening] = useState<boolean>(false); // Track listening state
 
-  const [bleManager] = useState(new BleManager());
   const [device, setDevice] = useState<Device | null>(null);
   const [espConnected, setEspConnected] = useState(false);
 
@@ -18,16 +20,21 @@ const VoiceRecognition = () => {
 
   useEffect(() => {
     // Assign correct event handlers
+    console.log('on mount')
     Voice.onSpeechResults = onSpeechResults;
     Voice.onSpeechError = onSpeechError;
-
-    startBluetooth();
+    requestBluetoothPermission();
 
     // Cleanup listeners on component unmount
     return () => {
       Voice.destroy().then(Voice.removeAllListeners);
     };
   }, []);
+
+  useEffect(() => {
+    // Assign correct event handlers
+    console.log('Device Updated')
+  }, [device]);
 
   const requestBluetoothPermission = async () => {
     if (Platform.OS === 'ios') {
@@ -66,32 +73,39 @@ const VoiceRecognition = () => {
   }
 
   const startBluetooth = async () => {
-    requestBluetoothPermission();
-    const connectedDevices = await bleManager.connectedDevices([espServiceUUID]);
+    // requestBluetoothPermission();
+    // const connectedDevices = await bleManager.connectedDevices([espServiceUUID]);
 
-    if (connectedDevices.length > 0) {
-      // ESP is already connected
-      setDevice(connectedDevices[0]);
-      setEspConnected(true);
-    } else {
+    // if (connectedDevices.length > 0) {
+    //   // ESP is already connected
+    //   setDevice(connectedDevices[0]);
+    //   setEspConnected(true);
+    // } else {
       // ESP not yet connected, scan for ESP
-      scanBluetoothForESP();
-    }
+      await scanBluetoothForESP();
+    
   }
 
   const scanBluetoothForESP = async () => {
     console.log('scanning')
     bleManager.startDeviceScan(null, null, async (error, scannedDevice) => {
-      if (error) {
-        console.log(error);
-        return;
-      }
+      // console.log(scannedDevice)
+      // if (error) {
+      //   console.log('hit')r
+      //   console.log(error);
+      //   return;
+      // }
 
-      if (scannedDevice && scannedDevice.name === 'REPLACE WITH ESP NAME') {
+      if (scannedDevice && scannedDevice.name === 'SpeechToTextGlasses') {
+        console.log('device scanned')
         bleManager.stopDeviceScan();
         connectToESP(scannedDevice);
+        // bleManager.connectToDevice(scannedDevice.id,{
+        //   autoConnect: true,
+        // })
       }
     })
+    console.log('not found')
   }
   
   const connectToESP = async (scannedDevice: Device) => {
@@ -99,6 +113,7 @@ const VoiceRecognition = () => {
       const connectedDevice = await scannedDevice.connect().then((device) => {
         return device.discoverAllServicesAndCharacteristics()
       });
+      console.log(connectedDevice)
       setDevice(connectedDevice);
       setEspConnected(true);
     } catch (e) {
@@ -107,6 +122,7 @@ const VoiceRecognition = () => {
   }
 
   const sendResultString = async (sendString: string) => {
+    console.log(device)
     if (!device || !espConnected) {
       console.log('not connected')
       return;
@@ -114,29 +130,47 @@ const VoiceRecognition = () => {
 
     try {
 
-      let test = ""
+      let test = "0"
 
       // wait until ESP is ready
-      while (test != "1") {
+      while (test.trim() === "0") {
+        console.log('stuck')
         try {
-          const charc = await device.readCharacteristicForService("22222", "ABCD")
+          const charc = await device.readCharacteristicForService("ABCD", "2222")
           test = charc?.value ? Buffer.from(charc.value, 'base64').toString('utf-8') : ""
         }
         catch (e) {
           console.log('Error reading characteristic:', e);
           break;
         }
+
+        console.log('stuck val:')
+        console.log(test +'1213')
+      }
+      
+      console.log('test:')
+      console.log(test)
+
+      try {
+        console.log('sending: ' + Buffer.from(sendString, 'utf-8').toString('base64'))
+        await device.writeCharacteristicWithResponseForService(
+          "ABCD",
+          "1111",
+          Buffer.from(sendString, 'utf-8').toString('base64')
+        );
+      }
+      catch (e) {
+        console.log('Error writing characteristic:', e);
       }
 
-      await device.writeCharacteristicWithoutResponseForService(
-        "11111",
-        "ABCD",
-        Buffer.from(sendString, 'utf-8').toString('base64')
-      );
+      // test read
+      const charc = await device.readCharacteristicForService("ABCD", "1111")
+      let test2 = charc?.value ? Buffer.from(charc.value, 'base64').toString('utf-8') : ""
+      console.log('just written: ' + test2)
 
       await device.writeCharacteristicWithoutResponseForService(
-        "22222",
         "ABCD",
+        "2222",
         Buffer.from("0", 'utf-8').toString('base64')
       );
     }
@@ -148,6 +182,9 @@ const VoiceRecognition = () => {
 
   const onSpeechResults = async (event: SpeechResultsEvent) => {
     // Check if event.value is defined and has values
+    if(!device){
+      console.log("Gay ass shit")
+    }
     if (event.value && Array.isArray(event.value) && event.value.length > 0) {
       // Set recognized text to the latest recognized phrase
       setRecognizedText(event.value[0]); // Replace with the most recent phrase
@@ -178,13 +215,16 @@ const VoiceRecognition = () => {
   };
 
   const startListening = async () => {
-    try {
-      await Voice.start('en-US');
-      setIsListening(true); // Set listening state to true
-      setError('');
-    } catch (e) {
-      console.error(e);
-    }
+    // console.log('listening device:')
+    // console.log(device)
+    // try {
+    //   await Voice.start('en-US');
+    //   setIsListening(true); // Set listening state to true
+    //   setError('');
+    // } catch (e) {
+    //   console.error(e);
+    // }
+    await sendResultString("Under the clear night sky, the city lights flickered like tiny stars, casting a warm glow over the quiet streets. A gentle wind whispered through the trees,")
   };
 
   const stopListening = async () => {
@@ -213,7 +253,7 @@ const VoiceRecognition = () => {
       ) : (
         <View>
           <Text style={{margin: "auto"}}>Attachment not connected</Text>
-            <Button title="Scan and Connect" onPress={scanBluetoothForESP}>
+            <Button title="Scan and Connect" onPress={startBluetooth}>
             </Button>
         </View>
       )}

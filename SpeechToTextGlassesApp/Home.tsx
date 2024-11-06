@@ -17,7 +17,7 @@ export default function Home() {
         alignItems: "center",
       }}
     >
-      <Voice></Voice>
+      <VoiceRecognition></VoiceRecognition>
     </GestureHandlerRootView>
   );
 }
