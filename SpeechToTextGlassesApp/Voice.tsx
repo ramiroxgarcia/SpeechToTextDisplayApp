@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Button, PermissionsAndroid, Platform, Alert } from 'react-native';
 import Voice, { SpeechResultsEvent, SpeechErrorEvent } from '@react-native-voice/voice';
 import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions'; // Import permissions
-import { BleManager, Device } from "react-native-ble-plx";
+import { BleManager, Device, DeviceId } from "react-native-ble-plx";
 
 const bleManager = new BleManager()
 global.Buffer = require('buffer').Buffer;
@@ -26,11 +26,20 @@ const VoiceRecognition = () => {
     console.log('on mount')
     Voice.onSpeechResults = onSpeechResults;
     Voice.onSpeechError = onSpeechError;
+
+    // console.log('destroing ble manager')
+    // const dev = bleManager.cancelDeviceConnection('30:C9:22:B1:3F:7E' as DeviceId ?? '' as DeviceId)
+    // console.log('device closed: ' + dev)
     requestBluetoothPermission();
+
+
 
     // Cleanup listeners on component unmount
     return () => {
       Voice.destroy().then(Voice.removeAllListeners);
+      // console.log('destroing ble manager')
+      // const dev = bleManager.cancelDeviceConnection('30:C9:22:B1:3F:7E' as DeviceId ?? '' as DeviceId)
+      // console.log('device closed: ' + dev)
     };
   }, []);
 
@@ -79,16 +88,24 @@ const VoiceRecognition = () => {
   }
 
   const startBluetooth = async () => {
-    // requestBluetoothPermission();
-    // const connectedDevices = await bleManager.connectedDevices([espServiceUUID]);
+      requestBluetoothPermission();
+      const connectedDevices = await bleManager.connectedDevices(['ABCD']);
 
-    // if (connectedDevices.length > 0) {
-    //   // ESP is already connected
-    //   setDevice(connectedDevices[0]);
-    //   setEspConnected(true);
-    // } else {
-      // ESP not yet connected, scan for ESP
-      await scanBluetoothForESP();
+      console.log('connect devices: ' + connectedDevices)
+
+      const dev = connectedDevices.find(d => d.name === 'SpeechToTextGlasses')
+      console.log('device found: ' + dev)
+
+      if (dev && !dev.isConnected) {
+        console.log('already connected bruh')
+        setDevice(dev)
+        setEspConnected(true)
+        connectToESP(dev)
+      }
+      else {
+        // ESP not yet connected, scan for ESP
+        await scanBluetoothForESP();
+      }
     
   }
 
@@ -119,7 +136,7 @@ const VoiceRecognition = () => {
       const connectedDevice = await scannedDevice.connect().then((device) => {
         return device.discoverAllServicesAndCharacteristics()
       });
-      console.log(connectedDevice)
+      // console.log(connectedDevice)
       setDevice(connectedDevice);
       setEspConnected(true);
     } catch (e) {
@@ -128,7 +145,7 @@ const VoiceRecognition = () => {
   }
 
   const sendResultString = async (sendString: string) => {
-    console.log(deviceRef.current)
+    // console.log(deviceRef.current)
     if (!deviceRef.current || !espConnectedRef.current) {
       console.log(espConnectedRef.current)
       console.log('not connected')
@@ -159,6 +176,7 @@ const VoiceRecognition = () => {
       console.log(test)
 
       try {
+        console.log(sendString)
         console.log('sending: ' + Buffer.from(sendString, 'utf-8').toString('base64'))
         await deviceRef.current.writeCharacteristicWithResponseForService(
           "ABCD",
@@ -225,7 +243,7 @@ const VoiceRecognition = () => {
 
   const startListening = async () => {
     console.log('listening device:')
-    console.log(deviceRef.current)
+    // console.log(deviceRef.current)
     try {
       await Voice.start('en-US');
       setIsListening(true); // Set listening state to true
