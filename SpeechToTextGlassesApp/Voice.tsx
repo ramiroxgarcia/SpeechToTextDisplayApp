@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Button, PermissionsAndroid, Platform, Alert } from 'react-native';
 import Voice, { SpeechResultsEvent, SpeechErrorEvent } from '@react-native-voice/voice';
 import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions'; // Import permissions
@@ -14,6 +14,9 @@ const VoiceRecognition = () => {
 
   const [device, setDevice] = useState<Device | null>(null);
   const [espConnected, setEspConnected] = useState(false);
+
+  const deviceRef = useRef(device);
+  const espConnectedRef = useRef(espConnected)
 
   const espServiceUUID = '';
   const espCharacteristicUUID = '';
@@ -32,9 +35,12 @@ const VoiceRecognition = () => {
   }, []);
 
   useEffect(() => {
-    // Assign correct event handlers
-    console.log('Device Updated')
+    deviceRef.current = device;
   }, [device]);
+
+  useEffect(() => {
+    espConnectedRef.current = espConnected;
+  }, [espConnected]);
 
   const requestBluetoothPermission = async () => {
     if (Platform.OS === 'ios') {
@@ -122,8 +128,9 @@ const VoiceRecognition = () => {
   }
 
   const sendResultString = async (sendString: string) => {
-    console.log(device)
-    if (!device || !espConnected) {
+    console.log(deviceRef.current)
+    if (!deviceRef.current || !espConnectedRef.current) {
+      console.log(espConnectedRef.current)
       console.log('not connected')
       return;
     }
@@ -136,7 +143,7 @@ const VoiceRecognition = () => {
       while (test.trim() === "0") {
         console.log('stuck')
         try {
-          const charc = await device.readCharacteristicForService("ABCD", "2222")
+          const charc = await deviceRef.current.readCharacteristicForService("ABCD", "2222")
           test = charc?.value ? Buffer.from(charc.value, 'base64').toString('utf-8') : ""
         }
         catch (e) {
@@ -153,7 +160,7 @@ const VoiceRecognition = () => {
 
       try {
         console.log('sending: ' + Buffer.from(sendString, 'utf-8').toString('base64'))
-        await device.writeCharacteristicWithResponseForService(
+        await deviceRef.current.writeCharacteristicWithResponseForService(
           "ABCD",
           "1111",
           Buffer.from(sendString, 'utf-8').toString('base64')
@@ -164,11 +171,11 @@ const VoiceRecognition = () => {
       }
 
       // test read
-      const charc = await device.readCharacteristicForService("ABCD", "1111")
+      const charc = await deviceRef.current.readCharacteristicForService("ABCD", "1111")
       let test2 = charc?.value ? Buffer.from(charc.value, 'base64').toString('utf-8') : ""
       console.log('just written: ' + test2)
 
-      await device.writeCharacteristicWithoutResponseForService(
+      await deviceRef.current.writeCharacteristicWithoutResponseForService(
         "ABCD",
         "2222",
         Buffer.from("0", 'utf-8').toString('base64')
@@ -182,8 +189,9 @@ const VoiceRecognition = () => {
 
   const onSpeechResults = async (event: SpeechResultsEvent) => {
     // Check if event.value is defined and has values
-    if(!device){
-      console.log("Gay ass shit")
+    if (!deviceRef.current) {
+      console.log("Device is null");
+      return; // Early exit if device is not available
     }
     if (event.value && Array.isArray(event.value) && event.value.length > 0) {
       // Set recognized text to the latest recognized phrase
@@ -201,6 +209,7 @@ const VoiceRecognition = () => {
     } else {
       setError('Unknown error occurred');
     }
+    startListening();
   };
 
   // Request Microphone Permission
@@ -215,16 +224,16 @@ const VoiceRecognition = () => {
   };
 
   const startListening = async () => {
-    // console.log('listening device:')
-    // console.log(device)
-    // try {
-    //   await Voice.start('en-US');
-    //   setIsListening(true); // Set listening state to true
-    //   setError('');
-    // } catch (e) {
-    //   console.error(e);
-    // }
-    await sendResultString("Under the clear night sky, the city lights flickered like tiny stars, casting a warm glow over the quiet streets. A gentle wind whispered through the trees,")
+    console.log('listening device:')
+    console.log(deviceRef.current)
+    try {
+      await Voice.start('en-US');
+      setIsListening(true); // Set listening state to true
+      setError('');
+    } catch (e) {
+      console.error(e);
+    }
+    // await sendResultString("Under the clear night sky, the city lights flickered like tiny stars, casting a warm glow over the quiet streets. A gentle wind whispered through the trees,")
   };
 
   const stopListening = async () => {
