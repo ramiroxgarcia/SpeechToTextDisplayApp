@@ -2,9 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Button, PermissionsAndroid, Platform, Alert } from 'react-native';
 import Voice, { SpeechResultsEvent, SpeechErrorEvent } from '@react-native-voice/voice';
 import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions'; // Import permissions
-import { BleManager, Device, DeviceId } from "react-native-ble-plx";
+import BleManager from 'react-native-ble-manager'
 
-const bleManager = new BleManager()
 global.Buffer = require('buffer').Buffer;
 
 const VoiceRecognition = () => {
@@ -12,10 +11,8 @@ const VoiceRecognition = () => {
   const [error, setError] = useState<string>('');
   const [isListening, setIsListening] = useState<boolean>(false); // Track listening state
 
-  const [device, setDevice] = useState<Device | null>(null);
   const [espConnected, setEspConnected] = useState(false);
 
-  const deviceRef = useRef(device);
   const espConnectedRef = useRef(espConnected)
 
   const espServiceUUID = '';
@@ -27,10 +24,16 @@ const VoiceRecognition = () => {
     Voice.onSpeechResults = onSpeechResults;
     Voice.onSpeechError = onSpeechError;
 
+    BleManager.start({ showAlert: false }).then(() => {
+      // Success code
+      console.log("Module initialized");
+    });
+
     // console.log('destroing ble manager')
     // const dev = bleManager.cancelDeviceConnection('30:C9:22:B1:3F:7E' as DeviceId ?? '' as DeviceId)
     // console.log('device closed: ' + dev)
-    requestBluetoothPermission();
+
+    startBluetooth();
 
 
 
@@ -44,109 +47,77 @@ const VoiceRecognition = () => {
   }, []);
 
   useEffect(() => {
-    deviceRef.current = device;
-  }, [device]);
-
-  useEffect(() => {
     espConnectedRef.current = espConnected;
   }, [espConnected]);
 
   const requestBluetoothPermission = async () => {
-    if (Platform.OS === 'ios') {
-      return true
-    }
-    if (Platform.OS === 'android' && PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION) {
-      const apiLevel = parseInt(Platform.Version.toString(), 10)
-  
-      if (apiLevel < 31) {
-        const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION)
-        return granted === PermissionsAndroid.RESULTS.GRANTED
+    BleManager.enableBluetooth().then(() => {
+        console.log("The bluetooth is already enabled or the user confirm");
       }
-      if (PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
-        const result = await PermissionsAndroid.requestMultiple([
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-        ])
+    )
 
-        console.log('perms granted')
-        console.log(result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED &&
-          result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
-          result['android.permission.ACCESS_FINE_LOCATION'] === PermissionsAndroid.RESULTS.GRANTED);
-        
-        return (
-          result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED &&
-          result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
-          result['android.permission.ACCESS_FINE_LOCATION'] === PermissionsAndroid.RESULTS.GRANTED
-        )
-      }
+    if (Platform.OS === 'android' && Platform.Version >= 23) {
+      PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      ).then(result => {
+        if (result) {
+          console.log('Permission is OK');
+        } else {
+          PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          ).then(result => {
+            if (result) {
+              console.log('User accept');
+            } else {
+              console.log('User refuse');
+            }
+          });
+        }
+      });
     }
-  
-    console.log('Permission have not been granted')
-  
-    return false
   }
 
   const startBluetooth = async () => {
       requestBluetoothPermission();
-      const connectedDevices = await bleManager.connectedDevices(['ABCD']);
 
-      console.log('connect devices: ' + connectedDevices)
+      // get connected devices
+      BleManager.getConnectedPeripherals([]).then((peripheralsArray) => {
+        // Success code
+        if (peripheralsArray.length != 0) {
+          for (let i = 0; i < peripheralsArray.length; i++) {
+            let device = peripheralsArray[i]
 
-      const dev = connectedDevices.find(d => d.name === 'SpeechToTextGlasses')
-      console.log('device found: ' + dev)
+            console.log('connected device: ' + device)
 
-      if (dev && !dev.isConnected) {
-        console.log('already connected bruh')
-        setDevice(dev)
-        setEspConnected(true)
-        connectToESP(dev)
-      }
-      else {
-        // ESP not yet connected, scan for ESP
-        await scanBluetoothForESP();
-      }
-    
-  }
+            if (device && device.name === 'SpeechToTextGlasses') {
+              setEspConnected(true)
+            }
 
-  const scanBluetoothForESP = async () => {
-    console.log('scanning')
-    bleManager.startDeviceScan(null, null, async (error, scannedDevice) => {
-      // console.log(scannedDevice)
-      // if (error) {
-      //   console.log('hit')r
-      //   console.log(error);
-      //   return;
-      // }
+          }
+        }
 
-      if (scannedDevice && scannedDevice.name === 'SpeechToTextGlasses') {
-        console.log('device scanned')
-        bleManager.stopDeviceScan();
-        connectToESP(scannedDevice);
-        // bleManager.connectToDevice(scannedDevice.id,{
-        //   autoConnect: true,
-        // })
-      }
-    })
-    console.log('not found')
+
+
+        console.log("Connected peripherals: " + peripheralsArray.length);
+      });
   }
   
-  const connectToESP = async (scannedDevice: Device) => {
-    try {
-      const connectedDevice = await scannedDevice.connect().then((device) => {
-        return device.discoverAllServicesAndCharacteristics()
-      });
-      // console.log(connectedDevice)
-      setDevice(connectedDevice);
-      setEspConnected(true);
-    } catch (e) {
-      console.error('Error connecting to ESP', e);
-    }
+  const connectToESP = async () => {
+    // try {
+    //   const connectedDevice = await scannedDevice.connect().then((device) => {
+    //     return device.discoverAllServicesAndCharacteristics()
+    //   });
+    //   // console.log(connectedDevice)
+    //   setDevice(connectedDevice);
+    //   setEspConnected(true);
+    // } catch (e) {
+    //   console.error('Error connecting to ESP', e);
+    // }
   }
 
   const sendResultString = async (sendString: string) => {
     // console.log(deviceRef.current)
-    if (!deviceRef.current || !espConnectedRef.current) {
+    if (!espConnectedRef.current) {
       console.log(espConnectedRef.current)
       console.log('not connected')
       return;
@@ -160,8 +131,8 @@ const VoiceRecognition = () => {
       while (test.trim() === "0") {
         console.log('stuck')
         try {
-          const charc = await deviceRef.current.readCharacteristicForService("ABCD", "2222")
-          test = charc?.value ? Buffer.from(charc.value, 'base64').toString('utf-8') : ""
+          let charc = await BleManager.read('30:C9:22:B1:3F:7E', 'ABCD', '2222')
+          test = charc[0].toString()
         }
         catch (e) {
           console.log('Error reading characteristic:', e);
@@ -177,27 +148,22 @@ const VoiceRecognition = () => {
 
       try {
         console.log(sendString)
-        console.log('sending: ' + Buffer.from(sendString, 'utf-8').toString('base64'))
-        await deviceRef.current.writeCharacteristicWithResponseForService(
-          "ABCD",
-          "1111",
-          Buffer.from(sendString, 'utf-8').toString('base64')
-        );
+        const buffer = Buffer.from(sendString)
+        console.log('sending: ' + buffer.toJSON().data)
+        await BleManager.write('30:C9:22:B1:3F:7E', 'ABCD', '2222', buffer.toJSON().data)
       }
       catch (e) {
         console.log('Error writing characteristic:', e);
       }
 
       // test read
-      const charc = await deviceRef.current.readCharacteristicForService("ABCD", "1111")
-      let test2 = charc?.value ? Buffer.from(charc.value, 'base64').toString('utf-8') : ""
-      console.log('just written: ' + test2)
+      // const charc = await deviceRef.current.readCharacteristicForService("ABCD", "1111")
+      // let test2 = charc?.value ? Buffer.from(charc.value, 'base64').toString('utf-8') : ""
+      // console.log('just written: ' + test2)
 
-      await deviceRef.current.writeCharacteristicWithoutResponseForService(
-        "ABCD",
-        "2222",
-        Buffer.from("0", 'utf-8').toString('base64')
-      );
+      const buffer = Buffer.from(sendString)
+
+      await BleManager.write('30:C9:22:B1:3F:7E', 'ABCD', '2222', [0])
     }
     catch (e) {
       console.log('Error sending message to ESP', e);
@@ -207,7 +173,7 @@ const VoiceRecognition = () => {
 
   const onSpeechResults = async (event: SpeechResultsEvent) => {
     // Check if event.value is defined and has values
-    if (!deviceRef.current) {
+    if (!espConnectedRef.current) {
       console.log("Device is null");
       return; // Early exit if device is not available
     }
@@ -280,8 +246,6 @@ const VoiceRecognition = () => {
       ) : (
         <View>
           <Text style={{margin: "auto"}}>Attachment not connected</Text>
-            <Button title="Scan and Connect" onPress={startBluetooth}>
-            </Button>
         </View>
       )}
     </View>
