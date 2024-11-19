@@ -20,6 +20,7 @@ export default function VoiceUI({ onStartListen = () => {},
             onEndListen();
         }
     };
+
     // sync prop value
     useEffect(() => {
         setVoiceResults(results);

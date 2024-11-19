@@ -3,8 +3,11 @@ import { View, Text, Button, PermissionsAndroid, Platform, Alert } from 'react-n
 import Voice, { SpeechResultsEvent, SpeechErrorEvent } from '@react-native-voice/voice';
 import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions'; // Import permissions
 import BleManager from 'react-native-ble-manager'
+import { BleManager as BlePlxManager, Device, NativeDevice } from 'react-native-ble-plx';
 
 global.Buffer = require('buffer').Buffer;
+const blePlxManager = new BlePlxManager()
+
 
 const VoiceRecognition = () => {
   const [recognizedText, setRecognizedText] = useState<string>('');
@@ -43,6 +46,16 @@ const VoiceRecognition = () => {
       // console.log('destroing ble manager')
       // const dev = bleManager.cancelDeviceConnection('30:C9:22:B1:3F:7E' as DeviceId ?? '' as DeviceId)
       // console.log('device closed: ' + dev)
+
+      BleManager.disconnect("30:C9:22:B1:3F:7E")
+      .then(() => {
+        // Success code
+        console.log("Disconnected");
+      })
+      .catch((error) => {
+        // Failure code
+        console.log(error);
+      });
     };
   }, []);
 
@@ -80,26 +93,36 @@ const VoiceRecognition = () => {
   const startBluetooth = async () => {
       requestBluetoothPermission();
 
-      // get connected devices
-      BleManager.getConnectedPeripherals([]).then((peripheralsArray) => {
-        // Success code
-        if (peripheralsArray.length != 0) {
-          for (let i = 0; i < peripheralsArray.length; i++) {
-            let device = peripheralsArray[i]
+      await checkConnected();
 
-            console.log('connected device: ' + device)
+      if (!espConnected) {
+        await connectToESP();
+      }
+  }
 
-            if (device && device.name === 'SpeechToTextGlasses') {
-              setEspConnected(true)
-            }
+  const checkConnected = async () => {
+    // get connected devices
+    BleManager.getConnectedPeripherals([]).then((peripheralsArray) => {
+      // Success code
+      console.log('prehit')
+      if (peripheralsArray.length != 0) {
+        for (let i = 0; i < peripheralsArray.length; i++) {
+          let device = peripheralsArray[i]
 
+          console.log('connected device: ' + device)
+
+          if (device && device.name === 'SpeechToTextGlasses') {
+            setEspConnected(true)
           }
+
         }
+        return;
+      }
 
 
 
-        console.log("Connected peripherals: " + peripheralsArray.length);
-      });
+      console.log("Connected peripherals: " + peripheralsArray.length);
+    });
   }
   
   const connectToESP = async () => {
@@ -113,6 +136,18 @@ const VoiceRecognition = () => {
     // } catch (e) {
     //   console.error('Error connecting to ESP', e);
     // }
+
+
+    BleManager.connect("30:C9:22:B1:3F:7E")
+      .then(() => {
+        // Success code
+        console.log("Connected");
+        setEspConnected(true);
+      })
+      .catch((error) => {
+        // Failure code
+        console.log(error);
+      });
   }
 
   const sendResultString = async (sendString: string) => {
@@ -123,6 +158,24 @@ const VoiceRecognition = () => {
       return;
     }
 
+    const nativeDevice = {
+      id: '30:C9:22:B1:3F:7E',                  // Device ID (MAC address or UUID)
+      mtu: 23,                   // Maximum Transmission Unit
+      rawScanRecord: 'MTIz',      // Base64-encoded string for raw scan data (example: 'MTIz' is Base64 for '123')
+      name: 'SpeechToTextGlasses',                 // Optional fields can be set to null
+      rssi: null,
+      manufacturerData: null,
+      serviceData: null,
+      serviceUUIDs: null,
+      localName: null,
+      txPowerLevel: null,
+      solicitedServiceUUIDs: null,
+      isConnectable: null,
+      overflowServiceUUIDs: null
+  };
+  
+  const device = new Device(nativeDevice, blePlxManager);
+
     try {
 
       let test = "0"
@@ -132,38 +185,59 @@ const VoiceRecognition = () => {
         console.log('stuck')
         try {
           let charc = await BleManager.read('30:C9:22:B1:3F:7E', 'ABCD', '2222')
+          console.log('pure read ' + charc)
           test = charc[0].toString()
+          // const charc = await device.readCharacteristicForService("ABCD", "2222")
+          // test = charc?.value ? Buffer.from(charc.value, 'base64').toString('utf-8') : ""
         }
         catch (e) {
           console.log('Error reading characteristic:', e);
           break;
         }
 
-        console.log('stuck val:')
-        console.log(test +'1213')
+        console.log('stuck val just read: ' + test)
       }
       
-      console.log('test:')
-      console.log(test)
+      console.log('test just read: ' + test)
 
       try {
         console.log(sendString)
+        
         const buffer = Buffer.from(sendString)
         console.log('sending: ' + buffer.toJSON().data)
-        await BleManager.write('30:C9:22:B1:3F:7E', 'ABCD', '2222', buffer.toJSON().data)
+
+
+        // convert the ASCII array to a string
+        const messageString = String.fromCharCode(...buffer.toJSON().data);
+
+        // encode the string to base64
+        const base64Message = Buffer.from(messageString).toString('base64');
+
+        const base64AsciiArray = Array.from(base64Message).map(char => char.charCodeAt(0));
+        
+        // await BleManager.write('30:C9:22:B1:3F:7E', 'ABCD', '2222', base64AsciiArray)
+
+        // console.log('sending: ' + Buffer.from(sendString, 'utf-8').toString('base64'))
+        // await device.writeCharacteristicWithResponseForService(
+        //   "ABCD",
+        //   "1111",
+        //   Buffer.from(sendString, 'utf-8').toString('base64')
+        // );
       }
       catch (e) {
         console.log('Error writing characteristic:', e);
       }
 
       // test read
-      // const charc = await deviceRef.current.readCharacteristicForService("ABCD", "1111")
-      // let test2 = charc?.value ? Buffer.from(charc.value, 'base64').toString('utf-8') : ""
-      // console.log('just written: ' + test2)
 
       const buffer = Buffer.from(sendString)
 
       await BleManager.write('30:C9:22:B1:3F:7E', 'ABCD', '2222', [0])
+      // await device.writeCharacteristicWithoutResponseForService(
+      //   "ABCD",
+      //   "2222",
+      //   Buffer.from("0", 'utf-8').toString('base64')
+      // );
     }
     catch (e) {
       console.log('Error sending message to ESP', e);

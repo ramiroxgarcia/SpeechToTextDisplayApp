@@ -88,7 +88,13 @@ export default function Index() {
         alignItems: "center",
       }}
     >
-      <VoiceUI onEndListen={handleEndListening} onStartListen={handleStartListening} results={results}></VoiceUI>
+      if (espConnected) {
+        <VoiceUI onEndListen={handleEndListening} onStartListen={handleStartListening} results={results}></VoiceUI>
+      }
+      else {
+        <Text>Device not connected</Text>
+      }
+
     </GestureHandlerRootView>
   );
 }
