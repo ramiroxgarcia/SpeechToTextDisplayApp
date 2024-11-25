@@ -347,6 +347,7 @@ const VoiceRecognition = () => {
     },
     button33: {
       borderRadius: 100,
+      backgroundColor: '#c2fbd7',
       shadowColor: '#2CBB63',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.2,
