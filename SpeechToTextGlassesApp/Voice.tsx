@@ -103,7 +103,7 @@ const VoiceRecognition = () => {
       requestBluetoothPermission();
 
       await checkConnected();
-
+      
       if (!espConnected) {
         await connectToESP();
       }
@@ -204,6 +204,12 @@ const VoiceRecognition = () => {
           // test = charc?.value ? Buffer.from(charc.value, 'base64').toString('utf-8') : ""
         }
         catch (e) {
+          if (e === 'Peripheral not found') {
+            setEspConnected(false);
+            setConnectionError(e);
+            return;
+          }
+
           console.log('Error reading characteristic:', e);
           break;
         }
@@ -215,6 +221,7 @@ const VoiceRecognition = () => {
 
       try {
         console.log(sendString.length)
+        console.log(sendString)
 
         if (sendString.length > 255) {
           console.log('hit len')
@@ -249,6 +256,11 @@ const VoiceRecognition = () => {
       }
       catch (e) {
         console.log('Error writing characteristic:', e);
+        if (e === 'Peripheral not found') {
+          setEspConnected(false);
+          setConnectionError(e);
+          return;
+        }
       }
 
       // test read
@@ -274,7 +286,7 @@ const VoiceRecognition = () => {
       console.log("Device is null");
       return; // Early exit if device is not available
     }
-    if (event.value && Array.isArray(event.value) && event.value.length > 0) {
+    if (event.value && Array.isArray(event.value) && event.value.length > 0 && listeningStateRef.current) {
       // Set recognized text to the latest recognized phrase
       setRecognizedText(event.value[0]); // Replace with the most recent phrase
 
