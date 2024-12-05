@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Button, PermissionsAndroid, Platform, Alert, StyleSheet, Pressable } from 'react-native';
 import Voice, { SpeechResultsEvent, SpeechErrorEvent } from '@react-native-voice/voice';
-import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions'; // Import permissions
+import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import BleManager from 'react-native-ble-manager'
 import {LogBox} from 'react-native';
 import { BleManager as BlePlxManager, Device, NativeDevice } from 'react-native-ble-plx';
@@ -24,42 +24,22 @@ const VoiceRecognition = () => {
   const espConnectedRef = useRef(espConnected)
 
   const listeningStateRef = useRef(listeningState)
-  const espServiceUUID = '';
-  const espCharacteristicUUID = '';
 
   useEffect(() => {
     // Assign correct event handlers
-    console.log('on mount')
     Voice.onSpeechResults = onSpeechResults;
     Voice.onSpeechError = onSpeechError;
 
-    BleManager.start({ showAlert: false }).then(() => {
-      // Success code
-      console.log("Module initialized");
-    });
-
-    // console.log('destroing ble manager')
-    // const dev = bleManager.cancelDeviceConnection('30:C9:22:B1:3F:7E' as DeviceId ?? '' as DeviceId)
-    // console.log('device closed: ' + dev)
-
-    // startBluetooth();
-
+    BleManager.start({ showAlert: false });
 
 
     // Cleanup listeners on component unmount
     return () => {
       Voice.destroy().then(Voice.removeAllListeners);
-      // console.log('destroing ble manager')
-      // const dev = bleManager.cancelDeviceConnection('30:C9:22:B1:3F:7E' as DeviceId ?? '' as DeviceId)
-      // console.log('device closed: ' + dev)
 
+      // disconnect on unmount
       BleManager.disconnect("30:C9:22:B1:3F:7E")
-      .then(() => {
-        // Success code
-        console.log("Disconnected");
-      })
       .catch((error) => {
-        // Failure code
         console.log(error);
       });
     };
@@ -73,6 +53,7 @@ const VoiceRecognition = () => {
   }, [espConnected]);
 
   const requestBluetoothPermission = async () => {
+    
     BleManager.enableBluetooth().then(() => {
         console.log("The bluetooth is already enabled or the user confirm");
       }
@@ -83,15 +64,15 @@ const VoiceRecognition = () => {
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       ).then(result => {
         if (result) {
-          console.log('Permission is OK');
+          console.log('perms ok');
         } else {
           PermissionsAndroid.request(
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           ).then(result => {
             if (result) {
-              console.log('User accept');
+              console.log('user accepted');
             } else {
-              console.log('User refuse');
+              console.log('user refused');
             }
           });
         }
@@ -112,96 +93,50 @@ const VoiceRecognition = () => {
   const checkConnected = async () => {
     // get connected devices
     BleManager.getConnectedPeripherals([]).then((peripheralsArray) => {
-      // Success code
-      console.log('prehit')
       if (peripheralsArray.length != 0) {
         for (let i = 0; i < peripheralsArray.length; i++) {
           let device = peripheralsArray[i]
 
-          console.log('connected device: ' + device)
-
           if (device && device.name === 'SpeechToTextGlasses') {
-            setEspConnected(true)
+            setEspConnected(true) // device already connected
           }
 
         }
         return;
       }
-
-
-
-      console.log("Connected peripherals: " + peripheralsArray.length);
     });
   }
   
   const connectToESP = async () => {
-    // try {
-    //   const connectedDevice = await scannedDevice.connect().then((device) => {
-    //     return device.discoverAllServicesAndCharacteristics()
-    //   });
-    //   // console.log(connectedDevice)
-    //   setDevice(connectedDevice);
-    //   setEspConnected(true);
-    // } catch (e) {
-    //   console.error('Error connecting to ESP', e);
-    // }
-
-
     BleManager.connect("30:C9:22:B1:3F:7E")
       .then(() => {
-        // Success code
-        console.log("Connected");
         setEspConnected(true);
         setConnectionError('');
       })
       .catch((error) => {
-        // Failure code
+        // failure
         console.log(error);
         setConnectionError(error);
-
       });
   }
 
   const sendResultString = async (sendString: string) => {
-
-    // console.log(deviceRef.current)
-    if (!espConnectedRef.current) {
+    if (!espConnectedRef.current) { // esp not connected somehow
       console.log(espConnectedRef.current)
       console.log('not connected')
       return;
     }
 
-    const nativeDevice = {
-      id: '30:C9:22:B1:3F:7E',                  // Device ID (MAC address or UUID)
-      mtu: 23,                   // Maximum Transmission Unit
-      rawScanRecord: 'MTIz',      // Base64-encoded string for raw scan data (example: 'MTIz' is Base64 for '123')
-      name: 'SpeechToTextGlasses',                 // Optional fields can be set to null
-      rssi: null,
-      manufacturerData: null,
-      serviceData: null,
-      serviceUUIDs: null,
-      localName: null,
-      txPowerLevel: null,
-      solicitedServiceUUIDs: null,
-      isConnectable: null,
-      overflowServiceUUIDs: null
-  };
-  
-  const device = new Device(nativeDevice, blePlxManager);
-
     try {
 
-      let test = "0"
+      // ready flag receieved from ESP32, when received as "1", ESP32 is ready for a new message
+      let readyFlag = "0"
 
       // wait until ESP is ready
-      while (test.trim() === "0") {
-        console.log('stuck')
+      while (readyFlag.trim() === "0") {
         try {
           let charc = await BleManager.read('30:C9:22:B1:3F:7E', 'ABCD', '2222')
-          console.log('pure read ' + charc)
-          test = String.fromCharCode(charc[0])
-          // const charc = await device.readCharacteristicForService("ABCD", "2222")
-          // test = charc?.value ? Buffer.from(charc.value, 'base64').toString('utf-8') : ""
+          readyFlag = String.fromCharCode(charc[0])
         }
         catch (e) {
           if (e === 'Peripheral not found') {
@@ -209,50 +144,20 @@ const VoiceRecognition = () => {
             setConnectionError(e);
             return;
           }
-
-          console.log('Error reading characteristic:', e);
           break;
         }
-
-        console.log('stuck val just read: ' + test)
       }
-      
-      console.log('test just read: ' + test)
 
       try {
-        console.log(sendString.length)
-        console.log(sendString)
-
+        // max size of caption is 254 characters
         if (sendString.length > 255) {
-          console.log('hit len')
           sendString = sendString.substring(0, 255)
-          console.log(sendString.length)
         }
         
-        const buffer = Buffer.from(sendString + "\0")
+        const buffer = Buffer.from(sendString + "\0")   // append null char
         
-
-
-        console.log('sending: ' + buffer.toJSON().data)
-
-
-        // convert the ASCII array to a string
-        const messageString = String.fromCharCode(...buffer.toJSON().data);
-
-        // encode the string to base64
-        // const base64Message = Buffer.from(messageString).toString('base64');
-
-        // let messageEncoded = Array.from(messageString).map(char => char.charCodeAt(0));
-        
+        // write current captions result to ESP32
         await BleManager.write('30:C9:22:B1:3F:7E', 'ABCD', '1111', buffer.toJSON().data, 255)
-
-        // console.log('just sent: ' + messageEncoded)
-        // console.log('sending: ' + Buffer.from(sendString, 'utf-8').toString('base64'))
-        // await device.writeCharacteristicWithResponseForService(
-        //   "ABCD",
-        //   "1111",
-        //   Buffer.from(sendString, 'utf-8').toString('base64')
-        // );
       }
       catch (e) {
         console.log('Error writing characteristic:', e);
@@ -263,22 +168,13 @@ const VoiceRecognition = () => {
         }
       }
 
-      // test read
-
-      const buffer = Buffer.from(sendString)
-
+      // set ready flag to unready to let ESP32 know buffer is awaiting service
       await BleManager.write('30:C9:22:B1:3F:7E', 'ABCD', '2222', [48])
-      // await device.writeCharacteristicWithoutResponseForService(
-      //   "ABCD",
-      //   "2222",
-      //   Buffer.from("0", 'utf-8').toString('base64')
-      // );
     }
     catch (e) {
       console.log('Error sending message to ESP', e);
     }
   }
-
 
   const onSpeechResults = async (event: SpeechResultsEvent) => {
     // Check if event.value is defined and has values
@@ -294,7 +190,6 @@ const VoiceRecognition = () => {
 
       console.log(listeningStateRef.current)
       if(listeningStateRef.current){
-        console.log('still istening')
         startListening();
       }
     }
@@ -325,8 +220,6 @@ const VoiceRecognition = () => {
   };
 
   const startListening = async () => {
-    console.log('listening device:')
-    // console.log(deviceRef.current)
     try {
       await Voice.start('en-US');
       setIsListening(true); // Set listening state to true
@@ -334,19 +227,15 @@ const VoiceRecognition = () => {
     } catch (e) {
       // console.error(e);
     }
-    // await sendResultString("Under the clear night sky, the city lights flickered like tiny stars, casting a warm glow over the quiet streets. A gentle wind whispered through the trees,")
   };
 
   const stopListening = async () => {
     try {
-      console.log('hit1')
       await Voice.stop();
       setlisteningState(false);
       setIsListening(false); // Set listening state to false
-      console.log(isListening)
       setRecognizedText('');
     } catch (e) {
-      console.log('hit stop')
       // console.error(e);
     }
   };
@@ -357,7 +246,7 @@ const VoiceRecognition = () => {
       justifyContent: 'center',
       alignItems: 'center',
     },
-    button33: {
+    listenButton: {
       borderRadius: 100,
       backgroundColor: '#c2fbd7',
       shadowColor: '#2CBB63',
@@ -377,12 +266,12 @@ const VoiceRecognition = () => {
       ,
       alignContent: 'center',
       margin: 10,
-      elevation: 20, // Android shadow
+      elevation: 20
       
     },
-    button33Pressed: {
-      backgroundColor: '#a9d6bc', // Darker shade of the button color
-      transform: [{ scale: 0.95 }], // Scale down for "push in" effect
+    listenButtonPressed: {
+      backgroundColor: '#a9d6bc',
+      transform: [{ scale: 0.95 }]
     },
     text: {
       color: 'black',
@@ -398,8 +287,8 @@ const VoiceRecognition = () => {
       {espConnected ? (
         <>
           <Pressable
-          style={[styles.button33,
-            isPressed && styles.button33Pressed, ]}
+          style={[styles.listenButton,
+            isPressed && styles.listenButtonPressed, ]}
           onPressIn={() => setIsPressed(true)} // Button is pressed
           onPressOut={() => setIsPressed(false)} // Button is released\
           onPress={isListening ? stopListening : requestMicrophonePermission}>
@@ -411,7 +300,7 @@ const VoiceRecognition = () => {
         </>
       ) : (
         <View style={styles.container}>
-          <Pressable style={[styles.button33, isPressed && styles.button33Pressed]} 
+          <Pressable style={[styles.listenButton, isPressed && styles.listenButtonPressed]} 
           onPress={startBluetooth}
           onPressIn={() => setIsPressed(true)} // Button is pressed
           onPressOut={() => setIsPressed(false)} // Button is released\
